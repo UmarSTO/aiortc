@@ -10,7 +10,7 @@ var pc = null;
 // data channel
 var dc = null, dcInterval = null;
 
-function createPeerConnection() {
+function createPeerConnection() {    
     var config = {
         sdpSemantics: 'unified-plan'
     };
@@ -76,7 +76,7 @@ function enumerateInputDevices() {
 }
 
 function negotiate() {
-    return pc.createOffer().then((offer) => {
+    return pc.createOffer({offerToReceiveVideo:true}).then((offer) => {
         return pc.setLocalDescription(offer);
     }).then(() => {
         // wait for ICE gathering to complete
@@ -108,7 +108,8 @@ function negotiate() {
         }
 
         document.getElementById('offer-sdp').textContent = offer.sdp;
-        return fetch('/offer', {
+        // return fetch('/offer', {
+        return fetch('http://10.11.11.36:8000/offer', {
             body: JSON.stringify({
                 sdp: offer.sdp,
                 type: offer.type,

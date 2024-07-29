@@ -10,14 +10,14 @@ var pc = null;
 // data channel
 var dc = null, dcInterval = null;
 
-function createPeerConnection() {
+function createPeerConnection() {    
     var config = {
         sdpSemantics: 'unified-plan'
     };
 
-    // if (document.getElementById('use-stun').checked) {
-    //     config.iceServers = [{ urls: ['stun:stun.l.google.com:19302'] }];
-    // }
+    if (document.getElementById('use-stun').checked) {
+        config.iceServers = [{ urls: ['stun:stun.l.google.com:19302'] }];
+    }
 
     pc = new RTCPeerConnection(config);
 
@@ -38,45 +38,44 @@ function createPeerConnection() {
     signalingLog.textContent = pc.signalingState;
 
     // connect audio / video
-    pc.addEventListener('track', (evt) => {        
-        console.log('track received')
+    pc.addEventListener('track', (evt) => {
+        console.log('track on')
         if (evt.track.kind == 'video')
             document.getElementById('video').srcObject = evt.streams[0];
         else
             document.getElementById('audio').srcObject = evt.streams[0];
-    });   
-        
+    });
 
     return pc;
 }
 
-// function enumerateInputDevices() {
-//     const populateSelect = (select, devices) => {
-//         let counter = 1;
-//         devices.forEach((device) => {
-//             const option = document.createElement('option');
-//             option.value = device.deviceId;
-//             option.text = device.label || ('Device #' + counter);
-//             select.appendChild(option);
-//             counter += 1;
-//         });
-//     };
+function enumerateInputDevices() {
+    const populateSelect = (select, devices) => {
+        let counter = 1;
+        devices.forEach((device) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || ('Device #' + counter);
+            select.appendChild(option);
+            counter += 1;
+        });
+    };
 
-//     navigator.mediaDevices.enumerateDevices().then((devices) => {
-//         populateSelect(
-//             document.getElementById('audio-input'),
-//             devices.filter((device) => device.kind == 'audioinput')
-//         );
-//         populateSelect(
-//             document.getElementById('video-input'),
-//             devices.filter((device) => device.kind == 'videoinput')
-//         );
-//     }).catch((e) => {
-//         alert(e);
-//     });
-// }
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+        populateSelect(
+            document.getElementById('audio-input'),
+            devices.filter((device) => device.kind == 'audioinput')
+        );
+        populateSelect(
+            document.getElementById('video-input'),
+            devices.filter((device) => device.kind == 'videoinput')
+        );
+    }).catch((e) => {
+        alert(e);
+    });
+}
 
-function negotiate() {    
+function negotiate() {
     return pc.createOffer().then((offer) => {
         return pc.setLocalDescription(offer);
     }).then(() => {
@@ -87,7 +86,7 @@ function negotiate() {
             } else {
                 function checkState() {
                     if (pc.iceGatheringState === 'complete') {
-                        pc.removeEventListener('icegatheringstatechange', checkState);                        
+                        pc.removeEventListener('icegatheringstatechange', checkState);
                         resolve();
                     }
                 }
@@ -109,7 +108,8 @@ function negotiate() {
         }
 
         document.getElementById('offer-sdp').textContent = offer.sdp;
-        return fetch('/offer', {
+        // return fetch('/offer', {
+        return fetch('http://localhost:8000/offer', {
             body: JSON.stringify({
                 sdp: offer.sdp,
                 type: offer.type,
@@ -146,31 +146,31 @@ function start() {
         }
     };
 
-    // if (document.getElementById('use-datachannel').checked) {
-    //     var parameters = JSON.parse(document.getElementById('datachannel-parameters').value);
+    if (document.getElementById('use-datachannel').checked) {
+        var parameters = JSON.parse(document.getElementById('datachannel-parameters').value);
 
-    //     dc = pc.createDataChannel('chat', parameters);
-    //     dc.addEventListener('close', () => {
-    //         clearInterval(dcInterval);
-    //         dataChannelLog.textContent += '- close\n';
-    //     });
-    //     dc.addEventListener('open', () => {
-    //         dataChannelLog.textContent += '- open\n';
-    //         dcInterval = setInterval(() => {
-    //             var message = 'ping ' + current_stamp();
-    //             dataChannelLog.textContent += '> ' + message + '\n';
-    //             dc.send(message);
-    //         }, 1000);
-    //     });
-    //     dc.addEventListener('message', (evt) => {
-    //         dataChannelLog.textContent += '< ' + evt.data + '\n';
+        dc = pc.createDataChannel('chat', parameters);
+        dc.addEventListener('close', () => {
+            clearInterval(dcInterval);
+            dataChannelLog.textContent += '- close\n';
+        });
+        dc.addEventListener('open', () => {
+            dataChannelLog.textContent += '- open\n';
+            dcInterval = setInterval(() => {
+                var message = 'ping ' + current_stamp();
+                dataChannelLog.textContent += '> ' + message + '\n';
+                dc.send(message);
+            }, 1000);
+        });
+        dc.addEventListener('message', (evt) => {
+            dataChannelLog.textContent += '< ' + evt.data + '\n';
 
-    //         if (evt.data.substring(0, 4) === 'pong') {
-    //             var elapsed_ms = current_stamp() - parseInt(evt.data.substring(5), 10);
-    //             dataChannelLog.textContent += ' RTT ' + elapsed_ms + ' ms\n';
-    //         }
-    //     });
-    // }
+            if (evt.data.substring(0, 4) === 'pong') {
+                var elapsed_ms = current_stamp() - parseInt(evt.data.substring(5), 10);
+                dataChannelLog.textContent += ' RTT ' + elapsed_ms + ' ms\n';
+            }
+        });
+    }
 
     // Build media constraints.
 
@@ -223,6 +223,16 @@ function start() {
             alert('Could not acquire media: ' + err);
         });
     } else {
+        console.log('here 1')
+        pc.addTransceiver('video')
+        pc.getTransceivers().forEach(t => t.direction = 'recvonly');
+        // close local audio / video
+        pc.getSenders().forEach(function(sender) {
+            // with our one way setup, seems like sender.track can be null - makes sense
+            if (sender.track) {
+                sender.track.stop();
+            }
+        });
         negotiate();
     }
 
@@ -318,4 +328,4 @@ function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }
 
-// enumerateInputDevices();
+enumerateInputDevices();
